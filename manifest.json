@@ -1,7 +1,7 @@
 {
-  "name": "Gestão de Casas",
-  "short_name": "Gestão Temporada",
-  "description": "Sistema de gestão de reservas de propriedades",
+  "name": "Gestão de Reservas",
+  "short_name": "Gestão de Reservas",
+  "description": "Gestão de Reservas de Casas por Temporada",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f8fafc",
