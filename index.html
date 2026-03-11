@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Reservas</title>
+    
+    <link id="manifest-link" rel="manifest" href="">
+    <meta name="theme-color" content="#0ea5e9">
+    <link rel="apple-touch-icon" href="https://via.placeholder.com/192/0ea5e9/ffffff?text=Reservas">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { -webkit-tap-highlight-color: transparent; padding-bottom: 5rem; } 
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #0ea5e9;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .calendar-day { min-height: 3.5rem; position: relative; }
+        .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin: 1px; }
+        .dot-ponta-negra { background-color: #fb923c; } 
+        .dot-redinha { background-color: #60a5fa; } 
+        .dot-cancelado { background-color: #ef4444; } 
+        
+        #day-tooltip { z-index: 60; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+
+    <!-- Cabeçalho Global -->
+    <header class="bg-sky-500 text-white p-4 shadow-md sticky top-0 z-20">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="calendar-days"></i>
+                Gestão de Casas
+            </h1>
+            <div class="flex items-center gap-3">
+                <span id="loading-indicator" class="loader border-white border-t-transparent hidden"></span>
+                <button id="btn-sync" class="p-2 bg-sky-600 rounded-full hover:bg-sky-700 transition active:scale-95">
+                    <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-md w-full mx-auto p-4 flex flex-col gap-6 relative">
+        
+        <!-- ========================================== -->
+        <!-- TELA 1: DASHBOARD (Calendário)             -->
+        <!-- ========================================== -->
+        <div id="view-dashboard" class="flex flex-col gap-5 transition-opacity duration-300">
+            <section class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                <div class="flex justify-between items-center mb-4">
+                    <button id="btn-prev-month" class="p-2 hover:bg-slate-100 rounded-full transition text-slate-500"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                    <h2 id="mes-atual-label" class="text-lg font-bold text-slate-700 capitalize">Mês Ano</h2>
+                    <button id="btn-next-month" class="p-2 hover:bg-slate-100 rounded-full transition text-slate-500"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                </div>
+                <div class="grid grid-cols-7 gap-1 text-center mb-2">
+                    <div class="text-xs font-semibold text-slate-400">Dom</div>
+                    <div class="text-xs font-semibold text-slate-400">Seg</div>
+                    <div class="text-xs font-semibold text-slate-400">Ter</div>
+                    <div class="text-xs font-semibold text-slate-400">Qua</div>
+                    <div class="text-xs font-semibold text-slate-400">Qui</div>
+                    <div class="text-xs font-semibold text-slate-400">Sex</div>
+                    <div class="text-xs font-semibold text-slate-400">Sáb</div>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center mb-5">
+                    <!-- Dias entram aqui -->
+                </div>
+                <div class="flex justify-center gap-4 text-xs text-slate-500 mb-5">
+                    <div class="flex items-center gap-1"><span class="dot dot-ponta-negra"></span> Ponta Negra</div>
+                    <div class="flex items-center gap-1"><span class="dot dot-redinha"></span> Redinha</div>
+                    <div class="flex items-center gap-1"><span class="dot dot-cancelado"></span> Canc.</div>
+                </div>
+                <button onclick="navegarPara('view-form')" class="w-full bg-sky-500 text-white font-medium py-3 rounded-xl hover:bg-sky-600 transition flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm">
+                    <i data-lucide="plus-circle" class="w-5 h-5"></i><span>Adicionar Reserva</span>
+                </button>
+            </section>
+            <section>
+                <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Em Andamento</h3>
+                <div id="container-andamento"></div>
+            </section>
+            <section>
+                <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Próxima Locação</h3>
+                <div id="container-proxima"></div>
+            </section>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TELA 2: FORMULÁRIO E ÚLTIMAS 2             -->
+        <!-- ========================================== -->
+        <div id="view-form" class="hidden flex flex-col gap-6 transition-opacity duration-300">
+            <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                <h2 id="form-titulo" class="text-lg font-semibold mb-4 text-slate-700 border-b pb-2 flex items-center gap-2">
+                    <i data-lucide="calendar-plus" class="w-5 h-5 text-sky-500"></i>Nova Reserva
+                </h2>
+                <form id="form-reserva" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Casa</label>
+                        <select id="input-casa" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none bg-white">
+                            <option value="Casa Ponta Negra">Casa Ponta Negra</option>
+                            <option value="Casa Redinha">Casa Redinha</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Nome do Responsável</label>
+                        <input type="text" id="input-nome" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Telefone / WhatsApp</label>
+                        <input type="tel" id="input-telefone" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none" placeholder="(84) 90000-0000">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Check-in</label>
+                            <input type="date" id="input-checkin" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Check-out</label>
+                            <input type="date" id="input-checkout" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Hóspedes</label>
+                            <input type="number" id="input-hospedes" min="1" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Valor (R$)</label>
+                            <input type="text" id="input-valor" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Status</label>
+                        <select id="input-status" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none bg-white">
+                            <option value="Confirmado">Confirmado</option>
+                            <option value="Cancelado">Cancelado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Anotações (Opcional)</label>
+                        <textarea id="input-anotacoes" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none"></textarea>
+                    </div>
+                    <button type="submit" id="btn-submit" class="w-full bg-emerald-500 text-white font-medium py-3 rounded-xl hover:bg-emerald-600 transition flex items-center justify-center gap-2 active:scale-[0.98]">
+                        <span id="btn-submit-text">Salvar Reserva</span><i data-lucide="check" class="w-5 h-5"></i>
+                    </button>
+                    <!-- Botão cancelar edição (apenas visível ao editar) -->
+                    <button type="button" id="btn-cancel-edit" onclick="cancelarEdicao()" class="hidden w-full bg-slate-100 text-slate-600 font-medium py-3 rounded-xl hover:bg-slate-200 transition">Cancelar Edição</button>
+                </form>
+            </section>
+            <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100" id="section-ultimas">
+                <h2 class="text-md font-semibold mb-4 text-slate-700 border-b pb-2 flex items-center gap-2">
+                    <i data-lucide="history" class="w-4 h-4 text-slate-400"></i>Último Cadastro
+                </h2>
+                <div id="lista-ultimas-2" class="space-y-3"></div>
+            </section>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TELA 3: GESTÃO (Consultar, Editar, Excluir)-->
+        <!-- ========================================== -->
+        <div id="view-gestao" class="hidden flex flex-col gap-5 transition-opacity duration-300">
+            <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex-1">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-lg font-semibold text-slate-700 flex items-center gap-2">
+                        <i data-lucide="list" class="w-5 h-5 text-sky-500"></i>Reservas
+                    </h2>
+                </div>
+                
+                <div class="mb-5">
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Classificar por:</label>
+                    <select id="sort-gestao" class="w-full border border-slate-300 rounded-lg text-slate-700 bg-slate-50 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-500 shadow-sm">
+                        <option value="checkin">Data de Check-in</option>
+                        <option value="checkout">Data de Check-out</option>
+                        <option value="cadastro">Data de Cadastro</option>
+                    </select>
+                </div>
+
+                <div id="lista-gestao" class="space-y-4">
+                    <!-- Lista completa entra aqui -->
+                </div>
+            </section>
+        </div>
+
+    </main>
+
+    <!-- Menu de Navegação Inferior -->
+    <nav class="fixed bottom-0 w-full bg-white border-t border-slate-200 flex justify-around pb-safe z-30 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <button class="nav-btn flex-1 py-3 flex flex-col items-center text-sky-600 font-medium transition" onclick="navegarPara('view-dashboard')" data-view="view-dashboard">
+            <i data-lucide="calendar" class="w-5 h-5 mb-1"></i><span class="text-[10px] uppercase tracking-wider">Dashboard</span>
+        </button>
+        <button class="nav-btn flex-1 py-3 flex flex-col items-center text-slate-400 transition" onclick="navegarPara('view-form')" data-view="view-form">
+            <i data-lucide="plus-circle" class="w-5 h-5 mb-1"></i><span class="text-[10px] uppercase tracking-wider">Nova</span>
+        </button>
+        <button class="nav-btn flex-1 py-3 flex flex-col items-center text-slate-400 transition" onclick="navegarPara('view-gestao')" data-view="view-gestao">
+            <i data-lucide="list" class="w-5 h-5 mb-1"></i><span class="text-[10px] uppercase tracking-wider">Reservas</span>
+        </button>
+    </nav>
+
+    <!-- Tooltip Customizado (Hover do Calendário) -->
+    <div id="day-tooltip" class="hidden absolute bg-slate-800 text-white text-xs rounded-lg p-3 shadow-xl max-w-[200px] pointer-events-none transform -translate-x-1/2 -translate-y-[calc(100%+10px)] opacity-0 transition-opacity">
+        <!-- Conteúdo do tooltip -->
+    </div>
+
+    <!-- Modal de Confirmação (Excluir) -->
+    <div id="modal-confirm" class="hidden fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 class="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><i data-lucide="trash-2" class="text-red-500 w-5 h-5"></i>Excluir Reserva?</h3>
+            <p class="text-sm text-slate-600 mb-6">Esta ação não pode ser desfeita. A reserva será removida permanentemente da sua planilha.</p>
+            <div class="flex justify-end gap-3">
+                <button onclick="fecharModalExcluir()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancelar</button>
+                <button id="btn-confirm-del" class="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition flex items-center gap-2">Sim, excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast de Notificação -->
+    <div id="toast" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2 whitespace-nowrap">
+        <span id="toast-icon-container"><i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i></span>
+        <span id="toast-msg">Mensagem</span>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // ==========================================
+        // CONFIGURAÇÕES GERAIS E ESTADO
+        // ==========================================
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzGv2r4qOYIrea7VSd_zu1_H3ILPVECr5H6rSZPlGZMbe1hf6LqCjkM19OGIbdRo7HC/exec"; 
+        
+        let reservasAtuais = [];
+        let currentDate = new Date(); 
+        window.calendarData = {}; 
+        let editingRowIndex = null; 
+        let deletingRowIndex = null; 
+        let tooltipHideTimeout = null; 
+
+        // Gerando datas dinâmicas pro MockData
+        const hojeObj = new Date(); const strHoje = hojeObj.toISOString().split('T')[0];
+        const objFuturo = new Date(hojeObj); objFuturo.setDate(objFuturo.getDate() + 5); const strFuturo = objFuturo.toISOString().split('T')[0];
+        
+        let mockData = [
+            ["Casa do Mar", "Mock Antigo", "(84) 99999-9999", "2023-01-10", "2023-01-15", "4", "1200,00", "Cancelado", "Teste antigo"],
+            ["Casa Ponta Negra", "Carlos (Demo)", "(84) 98888-8888", strHoje, strFuturo, "4", "1500,00", "Confirmado", "Em andamento"]
+        ];
+
+        // Elementos DOM principais
+        const form = document.getElementById('form-reserva');
+        const btnSubmit = document.getElementById('btn-submit');
+        const btnSync = document.getElementById('btn-sync');
+        const loading = document.getElementById('loading-indicator');
+        const sortGestao = document.getElementById('sort-gestao');
+        const dayTooltip = document.getElementById('day-tooltip');
+        const modalConfirm = document.getElementById('modal-confirm');
+
+        // ==========================================
+        // NAVEGAÇÃO ENTRE TELAS (BOTTOM NAV)
+        // ==========================================
+        function navegarPara(viewId) {
+            ['view-dashboard', 'view-form', 'view-gestao'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+            window.scrollTo(0,0);
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if (btn.getAttribute('data-view') === viewId) {
+                    btn.classList.replace('text-slate-400', 'text-sky-600');
+                } else {
+                    btn.classList.replace('text-sky-600', 'text-slate-400');
+                }
+            });
+
+            if (viewId === 'view-form' && !editingRowIndex) {
+                cancelarEdicao(false);
+            }
+        }
+
+        // ==========================================
+        // FUNÇÕES UTILITÁRIAS (DATES & UI)
+        // ==========================================
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const msgObj = document.getElementById('toast-msg');
+            const iconContainer = document.getElementById('toast-icon-container');
+            
+            msgObj.textContent = message;
+            if (isError) {
+                iconContainer.innerHTML = '<i data-lucide="alert-circle" class="w-5 h-5 text-red-400"></i>';
+            } else {
+                iconContainer.innerHTML = '<i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>';
+            }
+            lucide.createIcons();
+            toast.classList.remove('opacity-0');
+            setTimeout(() => { toast.classList.add('opacity-0'); }, 3000);
+        }
+
+        // Parse padrão para Exibição
+        function parseDateLocal(dataStr) {
+            if(!dataStr) return null;
+            try {
+                const date = new Date(dataStr);
+                return new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+            } catch(e) { return null; }
+        }
+
+        function formatarDataBR(dataStr) {
+            const d = parseDateLocal(dataStr);
+            if(!d) return dataStr;
+            return d.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'});
+        }
+
+        // Função robusta de Timestamp para ignorar fusos horários no validador de overbooking
+        function getStartOfDayTimestamp(dateVal) {
+            if (!dateVal) return null;
+            try {
+                let dStr = "";
+                if (typeof dateVal === 'string') { dStr = dateVal.split('T')[0]; } 
+                else { dStr = new Date(dateVal).toISOString().split('T')[0]; }
+                const parts = dStr.split('-');
+                if (parts.length !== 3) return null;
+                return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime();
+            } catch(e) { return null; }
+        }
+
+        function getStatusColor(status) {
+            status = status.toLowerCase();
+            if(status.includes('confirmado')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+            if(status.includes('cancelado')) return 'bg-red-100 text-red-700 border-red-200';
+            return 'bg-slate-100 text-slate-700 border-slate-200';
+        }
+
+        // ==========================================
+        // TOOLTIP DO CALENDÁRIO (Hover/Touch)
+        // ==========================================
+        function mostrarTooltip(e, dataStr) {
+            const reservasNoDia = window.calendarData[dataStr];
+            if (!reservasNoDia || reservasNoDia.length === 0) return;
+
+            clearTimeout(tooltipHideTimeout);
+
+            let html = `<div class="font-bold border-b border-slate-600 pb-1 mb-2 text-center">${formatarDataBR(dataStr)}</div>`;
+            reservasNoDia.forEach(res => {
+                const colorClass = res[0].toLowerCase().includes('ponta') ? 'text-orange-400' : 'text-blue-400';
+                html += `<div class="mb-1 leading-tight"><span class="font-semibold ${colorClass}">${res[0]}</span><br/>${res[1]} <span class="text-slate-400">(${res[7]})</span></div>`;
+            });
+
+            dayTooltip.innerHTML = html;
+            dayTooltip.classList.remove('hidden');
+            setTimeout(() => dayTooltip.classList.remove('opacity-0'), 10);
+
+            const rect = e.currentTarget.getBoundingClientRect();
+            dayTooltip.style.left = (rect.left + rect.width / 2) + 'px';
+            dayTooltip.style.top = (rect.top + window.scrollY) + 'px';
+        }
+
+        function ocultarTooltip() {
+            dayTooltip.classList.add('opacity-0');
+            tooltipHideTimeout = setTimeout(() => dayTooltip.classList.add('hidden'), 200); 
+        }
+
+        // ==========================================
+        // RENDERIZAÇÃO COMPARTILHADA (Cards)
+        // ==========================================
+        function gerarCardReserva(item, botoesAcao = false, avisoVazio = "Nenhuma reserva.") {
+            if (!item) return `<div class="p-4 bg-white rounded-xl border border-dashed border-slate-300 text-center text-slate-400 text-sm shadow-sm">${avisoVazio}</div>`;
+
+            const [casa, nome, telefone, checkin, checkout, hospedes, valor, status, anotacoes, rowIndex] = item;
+            const isPontaNegra = casa && String(casa).toLowerCase().includes('ponta negra');
+            const stripeColor = isPontaNegra ? 'bg-orange-400' : 'bg-blue-400';
+
+            let botoesHtml = '';
+            if (botoesAcao) {
+                botoesHtml = `
+                    <div class="mt-3 pt-3 border-t border-slate-100 flex justify-end gap-2">
+                        <button onclick="editarReserva(${rowIndex})" class="px-3 py-1.5 text-xs font-medium bg-sky-50 text-sky-600 rounded-lg hover:bg-sky-100 transition flex items-center gap-1"><i data-lucide="edit-2" class="w-3 h-3"></i>Editar</button>
+                        <button onclick="abrirModalExcluir(${rowIndex})" class="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition flex items-center gap-1"><i data-lucide="trash-2" class="w-3 h-3"></i>Excluir</button>
+                    </div>
+                `;
+            }
+
+            let btnWhatsapp = '';
+            // Fix TypeError by checking if telefone is a string before calling replace
+            if (telefone && typeof telefone === 'string') {
+                const telClean = telefone.replace(/\D/g, '');
+                if (telClean) {
+                    const ddi = telClean.length <= 11 ? '55' + telClean : telClean;
+                    btnWhatsapp = `
+                        <a href="https://wa.me/${ddi}" target="_blank" class="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md text-[11px] font-bold hover:bg-emerald-100 transition w-max cursor-pointer mt-0.5 mb-1" onclick="event.stopPropagation()">
+                            <i data-lucide="message-circle" class="w-3.5 h-3.5 text-emerald-600"></i> ${telefone}
+                        </a>
+                    `;
+                }
+            } else if (telefone && typeof telefone === 'number') {
+                // Handle numbers gracefully
+                const telStr = String(telefone);
+                const telClean = telStr.replace(/\D/g, '');
+                if (telClean) {
+                    const ddi = telClean.length <= 11 ? '55' + telClean : telClean;
+                    btnWhatsapp = `
+                        <a href="https://wa.me/${ddi}" target="_blank" class="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md text-[11px] font-bold hover:bg-emerald-100 transition w-max cursor-pointer mt-0.5 mb-1" onclick="event.stopPropagation()">
+                            <i data-lucide="message-circle" class="w-3.5 h-3.5 text-emerald-600"></i> ${telStr}
+                        </a>
+                    `;
+                }
+            }
+
+            return `
+                <div class="p-4 bg-white rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="absolute left-0 top-0 bottom-0 w-1 ${stripeColor}"></div>
+                    <div class="pl-2 flex flex-col h-full justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="font-bold text-slate-800 text-sm">${casa || ''}</h3>
+                                <span class="px-2 py-0.5 text-xs rounded-full border ${getStatusColor(status || '')} font-medium">${status || ''}</span>
+                            </div>
+                            <div class="flex flex-col mb-1">
+                                <div class="flex items-center gap-1 text-slate-600 text-sm">
+                                    <i data-lucide="user" class="w-4 h-4 text-slate-400"></i>
+                                    <span class="font-medium">${nome || ''}</span>
+                                    <span class="text-xs text-slate-400 ml-1">(${hospedes || ''} hósp.)</span>
+                                </div>
+                                ${btnWhatsapp}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-end mt-2 pt-2 border-t border-slate-50">
+                                <div class="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-2 py-1 rounded">
+                                    <i data-lucide="calendar" class="w-4 h-4 text-sky-500"></i>
+                                    <span>${formatarDataBR(checkin)} <i data-lucide="arrow-right" class="w-3 h-3 inline text-slate-300 mx-1"></i> ${formatarDataBR(checkout)}</span>
+                                </div>
+                                <div class="font-bold text-slate-700 text-sm">R$ ${valor || ''}</div>
+                            </div>
+                            ${botoesHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==========================================
+        // ATUALIZAÇÃO DAS TELAS
+        // ==========================================
+        function atualizarDashboard() {
+            renderCalendar();
+            const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+
+            const emAndamento = reservasAtuais.filter(res => {
+                if((res[7] || '').toLowerCase().includes('cancelado')) return false;
+                const inDate = parseDateLocal(res[3]); const outDate = parseDateLocal(res[4]);
+                if(!inDate || !outDate) return false;
+                inDate.setHours(0,0,0,0); outDate.setHours(0,0,0,0);
+                return hoje >= inDate && hoje <= outDate;
+            });
+            document.getElementById('container-andamento').innerHTML = emAndamento.length > 0 ? emAndamento.map(r => gerarCardReserva(r)).join('<div class="h-3"></div>') : gerarCardReserva(null, false, "Casas disponíveis no momento.");
+
+            const proximas = reservasAtuais.filter(res => {
+                if((res[7] || '').toLowerCase().includes('cancelado')) return false;
+                const inDate = parseDateLocal(res[3]);
+                if(!inDate) return false;
+                inDate.setHours(0,0,0,0);
+                return inDate > hoje;
+            }).sort((a, b) => parseDateLocal(a[3]) - parseDateLocal(b[3]));
+            document.getElementById('container-proxima').innerHTML = gerarCardReserva(proximas.length > 0 ? proximas[0] : null, false, "Nenhuma reserva futura.");
+            
+            lucide.createIcons();
+        }
+
+        function renderCalendar() {
+            const month = currentDate.getMonth(); const year = currentDate.getFullYear();
+            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            document.getElementById('mes-atual-label').textContent = `${monthNames[month]} ${year}`;
+
+            const grid = document.getElementById('calendar-grid'); grid.innerHTML = '';
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const hoje = new Date();
+            const isCurrentMonth = hoje.getMonth() === month && hoje.getFullYear() === year;
+
+            window.calendarData = {}; 
+
+            for (let i = 0; i < firstDay; i++) { grid.innerHTML += `<div class="calendar-day bg-slate-50/50 rounded-lg"></div>`; }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const isToday = isCurrentMonth && day === hoje.getDate();
+                const currentDayDate = new Date(year, month, day); currentDayDate.setHours(0,0,0,0);
+                
+                const dateKey = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                window.calendarData[dateKey] = [];
+
+                let dotsHtml = '';
+                reservasAtuais.forEach(res => {
+                    const checkin = parseDateLocal(res[3]); const checkout = parseDateLocal(res[4]);
+                    const status = (res[7] || '').toLowerCase(); const casa = (res[0] || '').toLowerCase();
+
+                    if (checkin && checkout) {
+                        checkin.setHours(0,0,0,0); checkout.setHours(0,0,0,0);
+                        if (currentDayDate >= checkin && currentDayDate <= checkout) {
+                            window.calendarData[dateKey].push(res); 
+                            let dotClass = 'dot-ponta-negra';
+                            if (status.includes('cancelado')) dotClass = 'dot-cancelado';
+                            else if (casa.includes('redinha')) dotClass = 'dot-redinha';
+                            dotsHtml += `<span class="dot ${dotClass}"></span>`;
+                        }
+                    }
+                });
+
+                grid.innerHTML += `
+                    <div class="calendar-day flex flex-col items-center p-1 rounded-lg border border-transparent cursor-pointer ${isToday ? 'bg-sky-50 border-sky-200' : 'bg-white hover:bg-slate-50 shadow-sm'}"
+                         onmouseenter="mostrarTooltip(event, '${dateKey}')" onmouseleave="ocultarTooltip()" onclick="mostrarTooltip(event, '${dateKey}')">
+                        <span class="text-sm ${isToday ? 'font-bold text-sky-600' : 'text-slate-700'}">${day}</span>
+                        <div class="flex flex-wrap justify-center gap-[2px] mt-1 px-1 h-3 overflow-hidden">
+                            ${dotsHtml}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function atualizarListaUltimas() {
+            const container = document.getElementById('lista-ultimas-2');
+            if (reservasAtuais.length === 0) {
+                container.innerHTML = '<p class="text-center text-slate-400 text-sm py-4 italic">Nenhum cadastro recente.</p>';
+            } else {
+                // Alterado para mostrar apenas o último cadastro com os botões de ação
+                const ultimas = [...reservasAtuais].reverse().slice(0, 1);
+                container.innerHTML = ultimas.map(res => gerarCardReserva(res, true)).join('');
+            }
+        }
+
+        function atualizarListaGestao() {
+            const container = document.getElementById('lista-gestao');
+            if (reservasAtuais.length === 0) {
+                container.innerHTML = '<p class="text-center text-slate-400 text-sm py-4 italic">Nenhuma reserva na planilha.</p>';
+                return;
+            }
+
+            const sortBy = sortGestao.value;
+            let listaOrdenada = [...reservasAtuais];
+
+            if (sortBy === 'checkin') {
+                listaOrdenada.sort((a,b) => (parseDateLocal(a[3])?.getTime() || 0) - (parseDateLocal(b[3])?.getTime() || 0));
+            } else if (sortBy === 'checkout') {
+                listaOrdenada.sort((a,b) => (parseDateLocal(a[4])?.getTime() || 0) - (parseDateLocal(b[4])?.getTime() || 0));
+            } else if (sortBy === 'cadastro') {
+                // Invertido a ordem para exibir do mais recente para o mais antigo
+                listaOrdenada.sort((a,b) => b[9] - a[9]); 
+            }
+
+            container.innerHTML = listaOrdenada.map(res => gerarCardReserva(res, true)).join('');
+            lucide.createIcons();
+        }
+
+        sortGestao.addEventListener('change', atualizarListaGestao);
+
+        document.getElementById('btn-prev-month').addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() - 1); atualizarDashboard(); });
+        document.getElementById('btn-next-month').addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() + 1); atualizarDashboard(); });
+
+        // ==========================================
+        // LÓGICA DE DADOS (CRUD via Fetch)
+        // ==========================================
+        async function fetchReservas() {
+            loading.classList.remove('hidden');
+            if (SCRIPT_URL === "") {
+                setTimeout(() => {
+                    reservasAtuais = mockData.map((item, idx) => {
+                        let newItem = [...item];
+                        newItem[9] = idx + 2; 
+                        return newItem;
+                    });
+                    atualizarDashboard(); atualizarListaUltimas(); atualizarListaGestao();
+                    loading.classList.add('hidden');
+                }, 600);
+                return;
+            }
+
+            try {
+                // CORREÇÃO: Aplica um parâmetro "t" com timestamp para burlar o agressivo sistema de CACHE do navegador/Google.
+                const urlObj = new URL(SCRIPT_URL);
+                urlObj.searchParams.append('t', new Date().getTime());
+                
+                const response = await fetch(urlObj.toString());
+                const data = await response.json();
+                
+                // Remove o cabeçalho se existir
+                if (data.length > 0 && typeof data[0][0] === 'string' && data[0][0].toLowerCase().includes('casa')) data.shift(); 
+                
+                // Filtra linhas completamente em branco e adiciona o ID correspondente da planilha
+                reservasAtuais = data.map((item, idx) => {
+                    let newItem = [...item];
+                    // Garante que o array tenha espaço para 9 colunas mesmo que o Google devolva menos em planilhas zoadas
+                    while(newItem.length < 9) newItem.push(""); 
+                    newItem[9] = idx + 2; 
+                    return newItem;
+                }).filter(item => item[0] && String(item[0]).trim() !== '');
+                
+                atualizarDashboard(); atualizarListaUltimas(); atualizarListaGestao();
+            } catch (error) { 
+                showToast("Erro ao carregar planilha", true); 
+                console.error(error);
+            } finally { 
+                loading.classList.add('hidden'); 
+            }
+        }
+
+        function verificarOverbooking(novaCasa, novoCheckinStr, novoCheckoutStr) {
+            // CORREÇÃO: Formatação de timestamps blindada contra fuso horário (UTC vs GMT-3)
+            const novoIn = getStartOfDayTimestamp(novoCheckinStr);
+            const novoOut = getStartOfDayTimestamp(novoCheckoutStr);
+
+            if (!novoIn || !novoOut || novoOut <= novoIn) { 
+                showToast("O check-out deve ser após o check-in!", true); 
+                return "invalido"; 
+            }
+
+            for (let i = 0; i < reservasAtuais.length; i++) {
+                const res = reservasAtuais[i];
+                
+                // CORREÇÃO: Ignora sua própria reserva se você estiver editando-a (validação de número vs string)
+                if (editingRowIndex && Number(editingRowIndex) === Number(res[9])) continue;
+
+                if ((res[7] || '').toLowerCase().includes('cancelado') || res[0] !== novaCasa) continue;
+
+                const existIn = getStartOfDayTimestamp(res[3]);
+                const existOut = getStartOfDayTimestamp(res[4]);
+                
+                if (!existIn || !existOut) continue;
+
+                // Existe cruzamento (overlap) entre as datas das diárias?
+                if (novoIn < existOut && novoOut > existIn) return true; 
+            }
+            return false; 
+        }
+
+        // --- EDITAR ---
+        function editarReserva(rowIndex) {
+            const reserva = reservasAtuais.find(r => r[9] === rowIndex);
+            if(!reserva) return;
+
+            document.getElementById('input-casa').value = reserva[0] || '';
+            document.getElementById('input-nome').value = reserva[1] || '';
+            document.getElementById('input-telefone').value = reserva[2] || '';
+            try { document.getElementById('input-checkin').value = new Date(reserva[3]).toISOString().split('T')[0]; } catch(e){}
+            try { document.getElementById('input-checkout').value = new Date(reserva[4]).toISOString().split('T')[0]; } catch(e){}
+            document.getElementById('input-hospedes').value = reserva[5] || '';
+            document.getElementById('input-valor').value = reserva[6] || '';
+            document.getElementById('input-status').value = reserva[7] || 'Confirmado';
+            document.getElementById('input-anotacoes').value = reserva[8] || '';
+
+            editingRowIndex = rowIndex;
+            document.getElementById('form-titulo').innerHTML = `<i data-lucide="edit" class="w-5 h-5 text-sky-500"></i>Editando Reserva`;
+            
+            const btnText = document.getElementById('btn-submit-text');
+            if (btnText) btnText.textContent = "Atualizar Reserva";
+            
+            document.getElementById('btn-cancel-edit').classList.remove('hidden');
+            document.getElementById('section-ultimas').classList.add('hidden');
+            lucide.createIcons();
+
+            navegarPara('view-form');
+        }
+
+        function cancelarEdicao(navigateBack = true) {
+            editingRowIndex = null;
+            form.reset();
+            document.getElementById('form-titulo').innerHTML = `<i data-lucide="calendar-plus" class="w-5 h-5 text-sky-500"></i>Nova Reserva`;
+            
+            const btnText = document.getElementById('btn-submit-text');
+            if (btnText) {
+                btnText.textContent = "Salvar Reserva";
+            }
+            
+            document.getElementById('btn-cancel-edit').classList.add('hidden');
+            document.getElementById('section-ultimas').classList.remove('hidden');
+            lucide.createIcons();
+            if(navigateBack) navegarPara('view-gestao');
+        }
+
+        // --- EXCLUIR ---
+        function abrirModalExcluir(rowIndex) {
+            deletingRowIndex = rowIndex;
+            modalConfirm.classList.remove('hidden');
+        }
+        function fecharModalExcluir() {
+            deletingRowIndex = null;
+            modalConfirm.classList.add('hidden');
+        }
+        
+        document.getElementById('btn-confirm-del').addEventListener('click', async () => {
+            if(!deletingRowIndex) return;
+            const originalText = document.getElementById('btn-confirm-del').innerHTML;
+            document.getElementById('btn-confirm-del').innerHTML = '<span class="loader border-white border-t-transparent w-4 h-4"></span> Apagando...';
+            
+            const payload = { action: 'delete', rowIndex: deletingRowIndex };
+
+            if (SCRIPT_URL === "") {
+                setTimeout(() => {
+                    mockData = mockData.filter((_, idx) => (idx+2) !== deletingRowIndex);
+                    fecharModalExcluir(); fetchReservas(); showToast("Excluído (Demo)");
+                    document.getElementById('btn-confirm-del').innerHTML = originalText;
+                }, 800);
+                return;
+            }
+
+            try {
+                await fetch(SCRIPT_URL, { 
+                    method: 'POST', 
+                    mode: 'no-cors',
+                    body: JSON.stringify(payload) 
+                });
+                showToast("Reserva excluída!"); 
+                
+                // CORREÇÃO: Atraso necessário antes de ler os novos dados
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await fetchReservas(); 
+                
+                // Se estivermos na aba formulário, atualizamos a visualização para garantir
+                // que a reserva excluída não continue lá
+                const currentView = Array.from(document.querySelectorAll('.nav-btn')).find(btn => btn.classList.contains('text-sky-600'))?.getAttribute('data-view');
+                if (currentView === 'view-form') {
+                    atualizarListaUltimas();
+                }
+            } catch(e) { 
+                showToast("Erro ao excluir", true); 
+                console.error("Erro na exclusão:", e);
+            } finally { 
+                fecharModalExcluir(); 
+                document.getElementById('btn-confirm-del').innerHTML = originalText; 
+            }
+        });
+
+
+        // --- SALVAR / ATUALIZAR ---
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const casa = document.getElementById('input-casa').value;
+            const checkin = document.getElementById('input-checkin').value;
+            const checkout = document.getElementById('input-checkout').value;
+
+            const overbooking = verificarOverbooking(casa, checkin, checkout);
+            if (overbooking === "invalido") return; 
+            if (overbooking === true) { showToast(`Já existe reserva para a ${casa} neste período!`, true); return; }
+
+            const payloadDados = {
+                casa: casa, 
+                nome: document.getElementById('input-nome').value,
+                telefone: document.getElementById('input-telefone').value,
+                checkin: checkin, 
+                checkout: checkout,
+                hospedes: document.getElementById('input-hospedes').value, 
+                valor: document.getElementById('input-valor').value,
+                status: document.getElementById('input-status').value, 
+                anotacoes: document.getElementById('input-anotacoes').value
+            };
+
+            const payloadRequisicao = {
+                action: editingRowIndex ? 'update' : 'create',
+                rowIndex: editingRowIndex,
+                dados: payloadDados
+            };
+
+            btnSubmit.innerHTML = '<span class="loader border-white border-t-transparent w-4 h-4"></span><span id="btn-submit-text">Salvando...</span>';
+            btnSubmit.disabled = true;
+
+            if (SCRIPT_URL === "") {
+                setTimeout(() => {
+                    if (editingRowIndex) {
+                        const indexMock = editingRowIndex - 2;
+                        mockData[indexMock] = [payloadDados.casa, payloadDados.nome, payloadDados.telefone, payloadDados.checkin, payloadDados.checkout, payloadDados.hospedes, payloadDados.valor, payloadDados.status, payloadDados.anotacoes];
+                    } else {
+                        mockData.push([payloadDados.casa, payloadDados.nome, payloadDados.telefone, payloadDados.checkin, payloadDados.checkout, payloadDados.hospedes, payloadDados.valor, payloadDados.status, payloadDados.anotacoes]);
+                    }
+                    btnSubmit.innerHTML = '<span id="btn-submit-text">Salvar Reserva</span><i data-lucide="check" class="w-5 h-5"></i>';
+                    lucide.createIcons();
+                    cancelarEdicao(false); fetchReservas(); showToast("Salvo! (Demo)");
+                    btnSubmit.disabled = false;
+                }, 800);
+                return;
+            }
+
+            try {
+                await fetch(SCRIPT_URL, { 
+                    method: 'POST', 
+                    mode: 'no-cors',
+                    body: JSON.stringify(payloadRequisicao) 
+                });
+                
+                showToast(editingRowIndex ? "Reserva atualizada!" : "Nova reserva salva!");
+                btnSubmit.innerHTML = '<span id="btn-submit-text">Salvar Reserva</span><i data-lucide="check" class="w-5 h-5"></i>';
+                lucide.createIcons();
+                
+                cancelarEdicao(false);
+                
+                // CORREÇÃO: Atraso necessário de 1s para o Google processar o POST recém lançado na planilha
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await fetchReservas(); 
+
+                if(!editingRowIndex) window.scrollTo(0, document.body.scrollHeight);
+            } catch (error) { 
+                console.error("Erro na requisição:", error);
+                showToast("Erro na comunicação", true); 
+                btnSubmit.innerHTML = `<span id="btn-submit-text">${editingRowIndex ? 'Atualizar Reserva' : 'Salvar Reserva'}</span><i data-lucide="check" class="w-5 h-5"></i>`;
+                lucide.createIcons();
+            } finally { 
+                btnSubmit.disabled = false; 
+            }
+        });
+
+        // Use optional chaining for btnSync event listener to fix the second error
+        btnSync?.addEventListener('click', () => {
+            const icon = btnSync.querySelector('i'); 
+            if (icon) icon.classList.add('animate-spin');
+            fetchReservas().then(() => setTimeout(() => {
+                if (icon) icon.classList.remove('animate-spin');
+            }, 500));
+        });
+
+        // Configura Manifesto
+        const manifestContent = { "name": "Gestão de Casas", "short_name": "Gestão", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#0ea5e9", "icons": [{ "src": "https://via.placeholder.com/192/0ea5e9/ffffff?text=App", "sizes": "192x192", "type": "image/png" }, { "src": "https://via.placeholder.com/512/0ea5e9/ffffff?text=App", "sizes": "512x512", "type": "image/png" }] };
+        document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([JSON.stringify(manifestContent)], { type: 'application/json' }));
+
+        // ==========================================
+        // REGISTRO DO SERVICE WORKER (Para Instalação PWA)
+        // ==========================================
+        const swCode = `
+            self.addEventListener('install', (e) => {
+                self.skipWaiting(); // Força a atualização imediata
+            });
+            
+            // Um Service Worker básico que não intercepta o tráfego da rede, 
+            // garantindo que os dados da planilha sejam sempre os mais recentes, 
+            // mas satisfazendo os requisitos de instalabilidade do Chrome/Safari.
+            self.addEventListener('fetch', (e) => {
+                return; 
+            });
+        `;
+        const swBlob = new Blob([swCode], { type: 'application/javascript' });
+        const swUrl = URL.createObjectURL(swBlob);
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register(swUrl)
+                    .then(registration => {
+                        console.log('ServiceWorker registrado com sucesso no escopo: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('Falha ao registrar o ServiceWorker: ', err);
+                    });
+            });
+        }
+
+        fetchReservas();
+    </script>
+</body>
+</html>
