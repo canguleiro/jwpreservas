@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Reservas</title>
     
-    <link id="manifest-link" rel="manifest" href="">
+    <!-- LIGADO AO NOVO FICHEIRO EXTERNO -->
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0ea5e9">
-    <link rel="apple-touch-icon" href="https://via.placeholder.com/192/0ea5e9/ffffff?text=Reservas">
+    <link rel="apple-touch-icon" href="icone-192.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -825,36 +826,17 @@
             }, 500));
         });
 
-        // Configura Manifesto
-        const manifestContent = { "name": "Gestão de Casas", "short_name": "Gestão", "display": "standalone", "background_color": "#f8fafc", "theme_color": "#0ea5e9", "icons": [{ "src": "https://via.placeholder.com/192/0ea5e9/ffffff?text=App", "sizes": "192x192", "type": "image/png" }, { "src": "https://via.placeholder.com/512/0ea5e9/ffffff?text=App", "sizes": "512x512", "type": "image/png" }] };
-        document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([JSON.stringify(manifestContent)], { type: 'application/json' }));
-
         // ==========================================
-        // REGISTRO DO SERVICE WORKER (Para Instalação PWA)
+        // REGISTO DO SERVICE WORKER EXTERNO
         // ==========================================
-        const swCode = `
-            self.addEventListener('install', (e) => {
-                self.skipWaiting(); // Força a atualização imediata
-            });
-            
-            // Um Service Worker básico que não intercepta o tráfego da rede, 
-            // garantindo que os dados da planilha sejam sempre os mais recentes, 
-            // mas satisfazendo os requisitos de instalabilidade do Chrome/Safari.
-            self.addEventListener('fetch', (e) => {
-                return; 
-            });
-        `;
-        const swBlob = new Blob([swCode], { type: 'application/javascript' });
-        const swUrl = URL.createObjectURL(swBlob);
-
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register(swUrl)
+                navigator.serviceWorker.register('sw.js')
                     .then(registration => {
-                        console.log('ServiceWorker registrado com sucesso no escopo: ', registration.scope);
+                        console.log('ServiceWorker registado com sucesso no escopo: ', registration.scope);
                     })
                     .catch(err => {
-                        console.log('Falha ao registrar o ServiceWorker: ', err);
+                        console.log('Falha ao registar o ServiceWorker: ', err);
                     });
             });
         }
