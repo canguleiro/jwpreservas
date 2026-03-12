@@ -635,12 +635,13 @@
             const grid = document.getElementById('annual-grid');
             grid.innerHTML = '';
 
-            // Renderiza legenda dinamicamente com base no filtro
+            // Renderiza legenda dinamicamente com base no filtro e nas cores de cada casa
             const legendContainer = document.getElementById('annual-legend');
             if (filterAnualCasa !== 'todas') {
+                let indisponivelColorClass = filterAnualCasa === 'ponta negra' ? 'bg-orange-100 border-orange-200' : 'bg-blue-100 border-blue-200';
                 legendContainer.innerHTML = `
                     <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-md bg-emerald-100 border border-emerald-200 inline-block"></span> Disponível</span>
-                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-md bg-red-100 border border-red-200 inline-block"></span> Indisponível</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-md ${indisponivelColorClass} border inline-block"></span> Indisponível</span>
                 `;
             } else {
                 legendContainer.innerHTML = `
@@ -685,12 +686,20 @@
                     
                     if (filterAnualCasa !== 'todas') {
                         let isBookedInFilter = false;
-                        if (filterAnualCasa === 'ponta negra' && isPontaNegraBooked) isBookedInFilter = true;
-                        if (filterAnualCasa === 'redinha' && isRedinhaBooked) isBookedInFilter = true;
+                        let bookedColorClass = '';
+                        
+                        if (filterAnualCasa === 'ponta negra' && isPontaNegraBooked) {
+                            isBookedInFilter = true;
+                            bookedColorClass = 'bg-orange-50 text-orange-500';
+                        }
+                        if (filterAnualCasa === 'redinha' && isRedinhaBooked) {
+                            isBookedInFilter = true;
+                            bookedColorClass = 'bg-blue-50 text-blue-500';
+                        }
 
                         if (isBookedInFilter) {
-                            // Indisponível (Vermelho suave)
-                            daysHtml += `<div class="text-[9px] rounded-[3px] flex items-center justify-center bg-red-50 text-red-500 font-bold">${day}</div>`;
+                            // Indisponível (Laranja ou Azul suave, dependendo da casa)
+                            daysHtml += `<div class="text-[9px] rounded-[3px] flex items-center justify-center ${bookedColorClass} font-bold">${day}</div>`;
                         } else {
                             // Disponível (Verde destacado)
                             daysHtml += `<div class="text-[9px] rounded-[3px] flex items-center justify-center bg-emerald-100 text-emerald-700 font-bold shadow-sm border border-emerald-200/50">${day}</div>`;
