@@ -232,9 +232,10 @@
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="annual-grid">
                     <!-- Preenchido via JS -->
                 </div>
-                <div class="mt-4 flex justify-center items-center gap-3 text-[10px] text-slate-500 font-medium">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400 inline-block"></span> Ponta Negra</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span> Redinha</span>
+                
+                <!-- Legenda do Calendário Anual (Atualizada Dinamicamente) -->
+                <div class="mt-4 flex flex-wrap justify-center items-center gap-3 text-[10px] text-slate-500 font-medium" id="annual-legend">
+                    <!-- Preenchido via JS -->
                 </div>
             </div>
             <!-- Fim da Área a ser Exportada -->
@@ -633,6 +634,21 @@
 
             const grid = document.getElementById('annual-grid');
             grid.innerHTML = '';
+
+            // Renderiza legenda dinamicamente com base no filtro
+            const legendContainer = document.getElementById('annual-legend');
+            if (filterAnualCasa !== 'todas') {
+                legendContainer.innerHTML = `
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-md bg-emerald-100 border border-emerald-200 inline-block"></span> Disponível</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-md bg-red-100 border border-red-200 inline-block"></span> Indisponível</span>
+                `;
+            } else {
+                legendContainer.innerHTML = `
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-md bg-emerald-50 border border-emerald-100 inline-block"></span> Disponível</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400 inline-block"></span> Ponta Negra Ocupada</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span> Redinha Ocupada</span>
+                `;
+            }
             
             const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
             
@@ -649,43 +665,47 @@
                     const currentDayDate = new Date(year, month, day); 
                     currentDayDate.setHours(0,0,0,0);
                     
-                    let isBooked = false;
-                    let bgClass = '';
-                    let dotClass = '';
+                    let isPontaNegraBooked = false;
+                    let isRedinhaBooked = false;
                     
                     reservasAtuais.forEach(res => {
                         const checkin = parseDateLocal(res[3]); const checkout = parseDateLocal(res[4]);
                         const status = (res[7] || '').toLowerCase(); const casa = (res[0] || '').toLowerCase();
                         
-                        if(status.includes('cancelado')) return; // Libera data se for cancelada
-                        if(filterAnualCasa !== 'todas' && !casa.includes(filterAnualCasa)) return;
+                        if(status.includes('cancelado')) return;
 
                         if (checkin && checkout) {
                             checkin.setHours(0,0,0,0); checkout.setHours(0,0,0,0);
                             if (currentDayDate >= checkin && currentDayDate <= checkout) {
-                                isBooked = true;
-                                if (casa.includes('ponta negra')) {
-                                    dotClass = 'bg-orange-400';
-                                    bgClass = 'bg-orange-50 text-orange-700 font-bold';
-                                } else if (casa.includes('redinha')) {
-                                    dotClass = 'bg-blue-400';
-                                    bgClass = 'bg-blue-50 text-blue-700 font-bold';
-                                }
+                                if (casa.includes('ponta negra')) isPontaNegraBooked = true;
+                                if (casa.includes('redinha')) isRedinhaBooked = true;
                             }
                         }
                     });
                     
-                    if(isBooked) {
-                        if (filterAnualCasa !== 'todas') {
-                            // Se filtrado, destaca bem o dia (Background sólido subtil)
-                            daysHtml += `<div class="text-[9px] rounded-[3px] flex items-center justify-center ${bgClass}">${day}</div>`;
+                    if (filterAnualCasa !== 'todas') {
+                        let isBookedInFilter = false;
+                        if (filterAnualCasa === 'ponta negra' && isPontaNegraBooked) isBookedInFilter = true;
+                        if (filterAnualCasa === 'redinha' && isRedinhaBooked) isBookedInFilter = true;
+
+                        if (isBookedInFilter) {
+                            // Indisponível (Vermelho suave)
+                            daysHtml += `<div class="text-[9px] rounded-[3px] flex items-center justify-center bg-red-50 text-red-500 font-bold">${day}</div>`;
                         } else {
-                            // Se Ambas, usa o clássico pontinho para identificar as casas
-                            daysHtml += `<div class="text-[9px] text-slate-700 flex flex-col items-center justify-center relative font-bold bg-slate-50 rounded-[3px]">${day}<span class="w-1 h-1 rounded-full absolute bottom-0 mb-0.5 ${dotClass}"></span></div>`;
+                            // Disponível (Verde destacado)
+                            daysHtml += `<div class="text-[9px] rounded-[3px] flex items-center justify-center bg-emerald-100 text-emerald-700 font-bold shadow-sm border border-emerald-200/50">${day}</div>`;
                         }
                     } else {
-                        // Dia livre
-                        daysHtml += `<div class="text-[9px] text-slate-400 flex items-center justify-center">${day}</div>`;
+                        if (isPontaNegraBooked || isRedinhaBooked) {
+                            let dots = '';
+                            if (isPontaNegraBooked) dots += `<span class="w-1 h-1 rounded-full bg-orange-400"></span>`;
+                            if (isRedinhaBooked)    dots += `<span class="w-1 h-1 rounded-full bg-blue-400"></span>`;
+                            // Ocupado em qualquer das casas (Cinza com pontos correspondentes)
+                            daysHtml += `<div class="text-[9px] text-slate-700 flex flex-col items-center justify-center relative font-bold bg-slate-50 rounded-[3px] border border-slate-100">${day}<div class="flex absolute bottom-0.5 gap-[2px]">${dots}</div></div>`;
+                        } else {
+                            // Disponível (Ambas as casas livres = Verde suave)
+                            daysHtml += `<div class="text-[9px] text-emerald-700 flex items-center justify-center bg-emerald-50 border border-emerald-100 rounded-[3px] font-bold">${day}</div>`;
+                        }
                     }
                 }
                 
@@ -713,8 +733,7 @@
             btn.disabled = true;
             
             try {
-                // Oculta coisas desnecessárias se houver e força estilo do print
-                target.classList.remove('shadow-sm'); // retira sombras externas do canvas
+                target.classList.remove('shadow-sm');
                 
                 const canvas = await html2canvas(target, { 
                     scale: 2, 
